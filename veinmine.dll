@@ -1,0 +1,2462 @@
+
+
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+using System.Runtime.Versioning;
+using System.Security;
+using System.Security.Permissions;
+using BepInEx;
+using BepInEx.Configuration;
+using BepInEx.Logging;
+using HarmonyLib;
+using JetBrains.Annotations;
+using Microsoft.CodeAnalysis;
+using ServerSync;
+using TMPro;
+using UnityEngine;
+
+[assembly: CompilationRelaxations(8)]
+[assembly: RuntimeCompatibility(WrapNonExceptionThrows = true)]
+[assembly: Debuggable(DebuggableAttribute.DebuggingModes.IgnoreSymbolStoreSequencePoints)]
+[assembly: AssemblyTitle("Veinmine")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("wisehorror & Azumatt")]
+[assembly: AssemblyProduct("Veinmine")]
+[assembly: AssemblyCopyright("Copyright © WiseHorror/Azumatt  2023")]
+[assembly: AssemblyTrademark("")]
+[assembly: ComVisible(false)]
+[assembly: Guid("b89ba476-237b-4a9b-837d-c6d07174918d")]
+[assembly: AssemblyFileVersion("1.3.1")]
+[assembly: TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
+[assembly: SecurityPermission(SecurityAction.RequestMinimum, SkipVerification = true)]
+[assembly: AssemblyVersion("1.3.1.0")]
+[module: UnverifiableCode]
+[module: RefSafetyRules(11)]
+namespace Microsoft.CodeAnalysis
+{
+	[CompilerGenerated]
+	[Microsoft.CodeAnalysis.Embedded]
+	internal sealed class EmbeddedAttribute : Attribute
+	{
+	}
+}
+namespace System.Runtime.CompilerServices
+{
+	[CompilerGenerated]
+	[Microsoft.CodeAnalysis.Embedded]
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Event | AttributeTargets.Parameter | AttributeTargets.ReturnValue | AttributeTargets.GenericParameter, AllowMultiple = false, Inherited = false)]
+	internal sealed class NullableAttribute : Attribute
+	{
+		public readonly byte[] NullableFlags;
+
+		public NullableAttribute(byte P_0)
+		{
+			NullableFlags = new byte[1] { P_0 };
+		}
+
+		public NullableAttribute(byte[] P_0)
+		{
+			NullableFlags = P_0;
+		}
+	}
+	[CompilerGenerated]
+	[Microsoft.CodeAnalysis.Embedded]
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Method | AttributeTargets.Interface | AttributeTargets.Delegate, AllowMultiple = false, Inherited = false)]
+	internal sealed class NullableContextAttribute : Attribute
+	{
+		public readonly byte Flag;
+
+		public NullableContextAttribute(byte P_0)
+		{
+			Flag = P_0;
+		}
+	}
+	[CompilerGenerated]
+	[Microsoft.CodeAnalysis.Embedded]
+	[AttributeUsage(AttributeTargets.Module, AllowMultiple = false, Inherited = false)]
+	internal sealed class RefSafetyRulesAttribute : Attribute
+	{
+		public readonly int Version;
+
+		public RefSafetyRulesAttribute(int P_0)
+		{
+			Version = P_0;
+		}
+	}
+}
+namespace Veinmine
+{
+	internal class Functions
+	{
+		public static float GetSkillIncreaseStep(Skills playerSkills, SkillType skillType)
+		{
+			//IL_0020: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0025: Unknown result type (might be due to invalid IL or missing references)
+			if ((Object)(object)playerSkills != (Object)null)
+			{
+				foreach (SkillDef skill in playerSkills.m_skills)
+				{
+					if (skill.m_skill == skillType)
+					{
+						return skill.m_increseStep;
+					}
+				}
+			}
+			return 1f;
+		}
+
+		public static float GetSkillLevel(Skills playerSkills, SkillType skillType)
+		{
+			//IL_000a: Unknown result type (might be due to invalid IL or missing references)
+			if ((Object)(object)playerSkills != (Object)null)
+			{
+				return playerSkills.GetSkill(skillType).m_level;
+			}
+			return 1f;
+		}
+
+		public static float GetDistanceFromPlayer(Vector3 playerPos, Vector3 colliderPos)
+		{
+			//IL_0000: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0001: Unknown result type (might be due to invalid IL or missing references)
+			return Vector3.Distance(playerPos, colliderPos);
+		}
+
+		public static HitData? SpreadDamage(HitData hit)
+		{
+			//IL_004f: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0063: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0073: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0087: Unknown result type (might be due to invalid IL or missing references)
+			//IL_008d: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0013: Unknown result type (might be due to invalid IL or missing references)
+			if (hit != null)
+			{
+				if (VeinMinePlugin.spreadDamageType.Value == VeinMinePlugin.SpreadTypes.Level)
+				{
+					float num = GetSkillLevel(((Character)Player.GetClosestPlayer(hit.m_point, 5f)).GetSkills(), (SkillType)12) * 0.01f;
+					hit.m_damage.m_pickaxe *= num;
+				}
+				else
+				{
+					hit.m_damage.m_pickaxe = ((Humanoid)Player.GetClosestPlayer(hit.m_point, 5f)).GetCurrentWeapon().GetDamage().m_pickaxe;
+					float num2 = Vector3.Distance(((Character)Player.GetClosestPlayer(hit.m_point, 5f)).GetTransform().position, hit.m_point);
+					if (num2 >= 2f)
+					{
+						hit.m_damage.m_pickaxe /= num2 * 1.25f;
+					}
+				}
+			}
+			return hit;
+		}
+	}
+	[HarmonyPatch(typeof(MineRock), "Damage")]
+	internal static class MineRockDamagePatch
+	{
+		private static bool Prefix(MineRock __instance, HitData hit)
+		{
+			//IL_0001: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0016: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0026: Unknown result type (might be due to invalid IL or missing references)
+			//IL_002b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00e3: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00e8: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00ec: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00f1: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00fa: Unknown result type (might be due to invalid IL or missing references)
+			//IL_007a: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0081: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0086: Unknown result type (might be due to invalid IL or missing references)
+			//IL_008a: Unknown result type (might be due to invalid IL or missing references)
+			//IL_009c: Unknown result type (might be due to invalid IL or missing references)
+			Player closestPlayer = Player.GetClosestPlayer(hit.m_point, 5f);
+			if (VeinMinePlugin.veinMineKey.Value.IsKeyHeld())
+			{
+				Vector3 point = hit.m_point;
+				Collider[] hitAreas = __instance.m_hitAreas;
+				foreach (Collider val in hitAreas)
+				{
+					if ((Object)(object)val == (Object)null)
+					{
+						continue;
+					}
+					Bounds bounds;
+					if (VeinMinePlugin.progressiveMode.Value == VeinMinePlugin.Toggle.On)
+					{
+						float num = VeinMinePlugin.progressiveMult.Value * Functions.GetSkillLevel(((Character)closestPlayer).GetSkills(), (SkillType)12);
+						Vector3 position = ((Character)closestPlayer).GetTransform().position;
+						bounds = val.bounds;
+						if (Functions.GetDistanceFromPlayer(position, ((Bounds)(ref bounds)).center) <= num)
+						{
+							ProcessHitArea(__instance, hit, val, point);
+						}
+					}
+					else
+					{
+						string text = $"Health{__instance.GetAreaIndex(val)}";
+						hit.m_damage.m_pickaxe = __instance.m_nview.GetZDO().GetFloat(text, __instance.m_health);
+						bounds = val.bounds;
+						hit.m_point = ((Bounds)(ref bounds)).center;
+						ProcessHitArea(__instance, hit, val, point);
+					}
+				}
+				return false;
+			}
+			return true;
+		}
+
+		private static void ProcessHitArea(MineRock __instance, HitData hit, Collider area, Vector3 firstHitPoint)
+		{
+			//IL_0075: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0076: Unknown result type (might be due to invalid IL or missing references)
+			hit.m_hitCollider = area;
+			if ((Object)(object)hit.m_hitCollider == (Object)null)
+			{
+				VeinMinePlugin.logger.LogInfo((object)"Minerock hit has no collider");
+				return;
+			}
+			int areaIndex = __instance.GetAreaIndex(hit.m_hitCollider);
+			if (areaIndex != -1)
+			{
+				VeinMinePlugin.logger.LogInfo((object)$"Hit mine rock area {areaIndex}");
+				__instance.m_nview.InvokeRPC("Hit", new object[2] { hit, areaIndex });
+				hit.m_point = firstHitPoint;
+			}
+		}
+	}
+	[HarmonyPatch(typeof(MineRock5), "Damage")]
+	internal static class MineRock5DamagePatch
+	{
+		private static void Prefix(MineRock5 __instance, HitData hit, out Dictionary<int, Vector3> __state)
+		{
+			//IL_001b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0069: Unknown result type (might be due to invalid IL or missing references)
+			//IL_008f: Unknown result type (might be due to invalid IL or missing references)
+			//IL_012b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_014b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_015c: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0161: Unknown result type (might be due to invalid IL or missing references)
+			if ((Object)(object)__instance == (Object)null)
+			{
+				__state = null;
+				return;
+			}
+			__instance.SetupColliders();
+			__state = new Dictionary<int, Vector3>();
+			Player closestPlayer = Player.GetClosestPlayer(hit.m_point, 5f);
+			if ((Object)(object)closestPlayer == (Object)null)
+			{
+				return;
+			}
+			float num;
+			try
+			{
+				num = Functions.GetSkillLevel(((Character)closestPlayer).GetSkills(), (SkillType)12);
+			}
+			catch
+			{
+				num = 0f;
+			}
+			float num2 = VeinMinePlugin.progressiveMult.Value * num;
+			ConfigEntry<KeyboardShortcut> veinMineKey = VeinMinePlugin.veinMineKey;
+			if (veinMineKey == null || !veinMineKey.Value.IsKeyHeld())
+			{
+				return;
+			}
+			ConfigEntry<VeinMinePlugin.Toggle> progressiveMode = VeinMinePlugin.progressiveMode;
+			IEnumerable<Collider> enumerable = ((progressiveMode == null || progressiveMode.Value != VeinMinePlugin.Toggle.On) ? (from c in __instance.m_hitAreas?.Select((HitArea area) => area?.m_collider)
+				where (Object)(object)c != (Object)null
+				select c) : Physics.OverlapSphere(hit.m_point, num2));
+			if (enumerable == null)
+			{
+				return;
+			}
+			foreach (Collider item in enumerable)
+			{
+				int areaIndex = __instance.GetAreaIndex(item);
+				if (areaIndex < 0)
+				{
+					continue;
+				}
+				HitArea hitArea = __instance.GetHitArea(areaIndex);
+				if (hitArea != null)
+				{
+					_ = hitArea.m_bound;
+					if ((Object)(object)hitArea.m_collider != (Object)null)
+					{
+						__state.Add(areaIndex, hitArea.m_bound.m_pos + ((Component)hitArea.m_collider).transform.position);
+					}
+				}
+			}
+		}
+
+		public static void Postfix(MineRock5 __instance, ZNetView ___m_nview, HitData hit, Dictionary<int, Vector3> __state)
+		{
+			//IL_0017: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0034: Unknown result type (might be due to invalid IL or missing references)
+			//IL_003a: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0055: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0072: Unknown result type (might be due to invalid IL or missing references)
+			if (__state == null || (Object)(object)__instance == (Object)null || (Object)(object)___m_nview == (Object)null)
+			{
+				return;
+			}
+			Player closestPlayer = Player.GetClosestPlayer(hit.m_point, 5f);
+			if (!((Object)(object)closestPlayer != (Object)null) || !(hit.m_attacker == ((Character)closestPlayer).GetZDOID()))
+			{
+				return;
+			}
+			ConfigEntry<KeyboardShortcut> veinMineKey = VeinMinePlugin.veinMineKey;
+			if (veinMineKey == null || !veinMineKey.Value.IsKeyHeld())
+			{
+				return;
+			}
+			ItemData currentWeapon = ((Humanoid)closestPlayer).GetCurrentWeapon();
+			if (currentWeapon == null || !(currentWeapon.GetDamage().m_pickaxe > 0f))
+			{
+				return;
+			}
+			foreach (KeyValuePair<int, Vector3> item in __state)
+			{
+				if (currentWeapon.m_durability > 0f || !currentWeapon.m_shared.m_useDurability)
+				{
+					try
+					{
+						___m_nview.InvokeRPC("RPC_Damage", new object[2] { hit, item.Key });
+					}
+					catch
+					{
+						VeinMinePlugin.logger.LogInfo((object)$"Skipping section: {item.Key} due to an error.");
+					}
+				}
+			}
+		}
+	}
+	[HarmonyPatch(typeof(MineRock5), "DamageArea")]
+	internal static class MineRock5DamageAreaPatch
+	{
+		private static bool Prefix(MineRock5 __instance, HitData hit, int hitAreaIndex, ref EffectList ___m_destroyedEffect, ref EffectList ___m_hitEffect, out float __state, ref bool __result)
+		{
+			//IL_0001: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0048: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00ac: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00b1: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00b5: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00ba: Unknown result type (might be due to invalid IL or missing references)
+			//IL_00d5: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0148: Unknown result type (might be due to invalid IL or missing references)
+			//IL_018c: Unknown result type (might be due to invalid IL or missing references)
+			//IL_018e: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0171: Unknown result type (might be due to invalid IL or missing references)
+			//IL_01e1: Unknown result type (might be due to invalid IL or missing references)
+			//IL_01cd: Unknown result type (might be due to invalid IL or missing references)
+			//IL_01ce: Unknown result type (might be due to invalid IL or missing references)
+			//IL_025b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_025c: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0290: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0295: Unknown result type (might be due to invalid IL or missing references)
+			//IL_029f: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02a4: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02a9: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02ad: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02af: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02c1: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02c6: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02d0: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02d5: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02da: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02de: Unknown result type (might be due to invalid IL or missing references)
+			//IL_02e0: Unknown result type (might be due to invalid IL or missing references)
+			Player closestPlayer = Player.GetClosestPlayer(hit.m_point, 5f);
+			ItemData val = ((closestPlayer != null) ? ((Humanoid)closestPlayer).GetCurrentWeapon() : null);
+			if (hit == null || (Object)(object)closestPlayer == (Object)null || val == null)
+			{
+				__state = 0f;
+				__result = false;
+				return false;
+			}
+			if (VeinMinePlugin.progressiveMode.Value == VeinMinePlugin.Toggle.Off && val.GetDamage().m_pickaxe > 0f)
+			{
+				hit.m_damage.m_pickaxe = __instance.m_health;
+			}
+			HitArea hitArea = __instance.GetHitArea(hitAreaIndex);
+			if (hitArea == null)
+			{
+				VeinMinePlugin.logger.LogInfo((object)$"Missing hit area {hitAreaIndex}");
+				__state = 0f;
+				__result = false;
+				return false;
+			}
+			__state = hitArea.m_health;
+			Bounds bounds = hitArea.m_collider.bounds;
+			Vector3 center = ((Bounds)(ref bounds)).center;
+			if (VeinMinePlugin.enableSpreadDamage.Value == VeinMinePlugin.Toggle.On)
+			{
+				hit = Functions.SpreadDamage(hit);
+			}
+			bool flag = VeinMinePlugin.veinMineKey.Value.IsKeyHeld();
+			VeinMinePlugin.logger.LogInfo((object)$"Hit mine rock {hitAreaIndex}");
+			if (hitArea == null)
+			{
+				VeinMinePlugin.logger.LogInfo((object)$"Missing hit area {hitAreaIndex}");
+				__result = false;
+				return false;
+			}
+			__instance.LoadHealth();
+			if (hitArea.m_health <= 0f)
+			{
+				VeinMinePlugin.logger.LogInfo((object)"Already destroyed");
+				__result = false;
+				return false;
+			}
+			DamageModifier val2 = default(DamageModifier);
+			hit.ApplyResistance(__instance.m_damageModifiers, ref val2);
+			float totalDamage = hit.GetTotalDamage();
+			if (hit.m_toolTier < __instance.m_minToolTier)
+			{
+				DamageText.instance.ShowText((TextType)5, hit.m_point, 0f, false);
+				__result = false;
+				return false;
+			}
+			DamageText.instance.ShowText(val2, center, totalDamage, false);
+			if (totalDamage <= 0f)
+			{
+				__result = false;
+				return false;
+			}
+			hitArea.m_health -= totalDamage;
+			__instance.SaveHealth();
+			if (VeinMinePlugin.removeEffects.Value == VeinMinePlugin.Toggle.Off)
+			{
+				__instance.m_hitEffect.Create(center, Quaternion.identity, (Transform)null, 1f, -1);
+			}
+			Player closestPlayer2 = Player.GetClosestPlayer(hit.m_point, 10f);
+			if (Object.op_Implicit((Object)(object)closestPlayer2))
+			{
+				((Character)closestPlayer2).AddNoise(100f);
+			}
+			if (hitArea.m_health <= 0f)
+			{
+				__instance.m_nview.InvokeRPC(ZNetView.Everybody, "RPC_SetAreaHealth", new object[2] { hitAreaIndex, hitArea.m_health });
+				if (VeinMinePlugin.removeEffects.Value == VeinMinePlugin.Toggle.Off)
+				{
+					__instance.m_destroyedEffect.Create(center, Quaternion.identity, (Transform)null, 1f, -1);
+				}
+				foreach (GameObject drop in __instance.m_dropItems.GetDropList())
+				{
+					if (flag)
+					{
+						Vector3 val3 = hit.m_point + Random.insideUnitSphere * 0.3f;
+						Object.Instantiate<GameObject>(drop, val3, Quaternion.identity);
+					}
+					else if (!flag)
+					{
+						Vector3 val4 = hit.m_point + Random.insideUnitSphere * 0.3f;
+						Object.Instantiate<GameObject>(drop, val4, Quaternion.identity);
+					}
+				}
+				if (__instance.AllDestroyed())
+				{
+					__instance.m_nview.Destroy();
+				}
+				__result = true;
+				return false;
+			}
+			__result = false;
+			return false;
+		}
+
+		private static void Postfix(MineRock5 __instance, HitData hit, float __state, bool __result)
+		{
+			//IL_0001: Unknown result type (might be due to invalid IL or missing references)
+			//IL_003b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_004b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_006b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0071: Unknown result type (might be due to invalid IL or missing references)
+			Player closestPlayer = Player.GetClosestPlayer(hit.m_point, 5f);
+			ItemData val = ((closestPlayer != null) ? ((Humanoid)closestPlayer).GetCurrentWeapon() : null);
+			if (hit != null && (Object)(object)closestPlayer != (Object)null && val != null && VeinMinePlugin.veinMineKey.Value.IsKeyHeld() && val.GetDamage().m_pickaxe > 0f && __state > 0f && hit.m_attacker == ((Character)closestPlayer).GetZDOID())
+			{
+				Skills skills = ((Character)closestPlayer).GetSkills();
+				float skillIncreaseStep = Functions.GetSkillIncreaseStep(skills, (SkillType)12);
+				if (VeinMinePlugin.progressiveMode.Value == VeinMinePlugin.Toggle.Off)
+				{
+					((Character)closestPlayer).RaiseSkill((SkillType)12, skillIncreaseStep);
+				}
+				else
+				{
+					((Character)closestPlayer).RaiseSkill((SkillType)12, skillIncreaseStep * VeinMinePlugin.xpMult.Value);
+				}
+				if (VeinMinePlugin.veinMineDurability.Value == VeinMinePlugin.Toggle.On && val.m_shared.m_useDurability)
+				{
+					float num = ((VeinMinePlugin.progressiveMode.Value == VeinMinePlugin.Toggle.On) ? (val.m_shared.m_useDurabilityDrain * ((120f - Functions.GetSkillLevel(skills, (SkillType)12)) / (20f * VeinMinePlugin.durabilityMult.Value))) : val.m_shared.m_useDurabilityDrain);
+					val.m_durability -= num;
+				}
+			}
+		}
+	}
+	[BepInPlugin("com.wisehorror.Veinmine", "Veinmine", "1.3.1")]
+	public class VeinMinePlugin : BaseUnityPlugin
+	{
+		public enum SpreadTypes
+		{
+			Level,
+			Distance
+		}
+
+		public enum Toggle
+		{
+			On = 1,
+			Off = 0
+		}
+
+		private class ConfigurationManagerAttributes
+		{
+			[UsedImplicitly]
+			public int? Order;
+
+			[UsedImplicitly]
+			public bool? Browsable;
+
+			[UsedImplicitly]
+			public string Category;
+
+			[UsedImplicitly]
+			public Action<ConfigEntryBase> CustomDrawer;
+		}
+
+		private class AcceptableShortcuts : AcceptableValueBase
+		{
+			public AcceptableShortcuts()
+				: base(typeof(KeyboardShortcut))
+			{
+			}
+
+			public override object Clamp(object value)
+			{
+				return value;
+			}
+
+			public override bool IsValid(object value)
+			{
+				return true;
+			}
+
+			public override string ToDescriptionString()
+			{
+				return "# Acceptable values: " + string.Join(", ", UnityInput.Current.SupportedKeyCodes);
+			}
+		}
+
+		internal const string ModName = "Veinmine";
+
+		internal const string ModVersion = "1.3.1";
+
+		internal const string Author = "wisehorror";
+
+		private const string ModGUID = "com.wisehorror.Veinmine";
+
+		private static string ConfigFileName = "com.wisehorror.Veinmine.cfg";
+
+		private static string ConfigFileFullPath;
+
+		internal static string ConnectionError;
+
+		private readonly Harmony _harmony = new Harmony("com.wisehorror.Veinmine");
+
+		public static ManualLogSource logger;
+
+		private static readonly ConfigSync ConfigSync;
+
+		private static ConfigEntry<Toggle> _serverConfigLocked;
+
+		public static ConfigEntry<KeyboardShortcut> veinMineKey;
+
+		public static ConfigEntry<Toggle> veinMineDurability;
+
+		public static ConfigEntry<Toggle> removeEffects;
+
+		public static ConfigEntry<Toggle> progressiveMode;
+
+		public static ConfigEntry<Toggle> enableSpreadDamage;
+
+		public static ConfigEntry<SpreadTypes> spreadDamageType;
+
+		public static ConfigEntry<float> progressiveMult;
+
+		public static ConfigEntry<float> durabilityMult;
+
+		public static ConfigEntry<float> xpMult;
+
+		private void Awake()
+		{
+			//IL_0041: Unknown result type (might be due to invalid IL or missing references)
+			_serverConfigLocked = config("1 - General", "Lock Configuration", Toggle.On, "If on, the configuration is locked and can be changed by server admins only.");
+			ConfigSync.AddLockingConfigEntry<Toggle>(_serverConfigLocked);
+			veinMineKey = config<KeyboardShortcut>("2 - General", "Veinmine", new KeyboardShortcut((KeyCode)308, Array.Empty<KeyCode>()), "Key (or button) to hold for veinmining. Refer to https://docs.unity3d.com/Manual/class-InputManager.html", synchronizedSetting: false);
+			veinMineDurability = config("2 - General", "Durability", Toggle.On, "Veinmining takes durability as if you mined every section manually.");
+			removeEffects = config("3 - Visual", "Remove Effects", Toggle.Off, "Remove mining visual effects to try to *possibly* reduce fps lag", synchronizedSetting: false);
+			progressiveMode = config("4 - Progressive", "Enable Progressive", Toggle.Off, "Progressive mode scales the number of sections mined according to the player's Pickaxes level.");
+			progressiveMult = config("4 - Progressive", "Radius Multiplier", 0.1f, "Radius around your hit area to veinmine. This value is multiplied by the player's Pickaxes level.\nKeep in mind 1 is the same length as the 1x1 wood floor.\nSo if you have Lvl 30 and set this value to 0.1, you will veinmine rocks in a radius of 3 (0.1 * 30 = 3).");
+			durabilityMult = config("4 - Progressive", "Durability Multiplier", 1f, "Determines durability lost when veinmining.\nThe formula is (120 - Pickaxes level) / (20 * multiplier) where \"multiplier\" is this value.");
+			xpMult = config("4 - Progressive", "XP Multiplier", 0.2f, "Multiplier for XP gained per rock section veinmined.");
+			enableSpreadDamage = config("4 - Progressive", "Enable Spread Damage", Toggle.Off, "Spreads your hit damage throughout all rock sections mined, as opposed to hitting every section for the total amount of damage.");
+			spreadDamageType = config("4 - Progressive", "Spread Damage Type", SpreadTypes.Distance, "Level: Scales damage done to each section based on your Pickaxes level.\nDistance: Calculates damage done to each section based on your distance from it, the farther away, the less damage you do.");
+			Assembly executingAssembly = Assembly.GetExecutingAssembly();
+			_harmony.PatchAll(executingAssembly);
+			SetupWatcher();
+		}
+
+		private void OnDestroy()
+		{
+			((BaseUnityPlugin)this).Config.Save();
+		}
+
+		private void SetupWatcher()
+		{
+			FileSystemWatcher fileSystemWatcher = new FileSystemWatcher(Paths.ConfigPath, ConfigFileName);
+			fileSystemWatcher.Changed += ReadConfigValues;
+			fileSystemWatcher.Created += ReadConfigValues;
+			fileSystemWatcher.Renamed += ReadConfigValues;
+			fileSystemWatcher.IncludeSubdirectories = true;
+			fileSystemWatcher.SynchronizingObject = ThreadingHelper.SynchronizingObject;
+			fileSystemWatcher.EnableRaisingEvents = true;
+		}
+
+		private void ReadConfigValues(object sender, FileSystemEventArgs e)
+		{
+			if (!File.Exists(ConfigFileFullPath))
+			{
+				return;
+			}
+			try
+			{
+				logger.LogDebug((object)"ReadConfigValues called");
+				((BaseUnityPlugin)this).Config.Reload();
+			}
+			catch
+			{
+				logger.LogError((object)("There was an issue loading your " + ConfigFileName));
+				logger.LogError((object)"Please check your config entries for spelling and format!");
+			}
+		}
+
+		private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
+		{
+			//IL_002a: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0030: Expected O, but got Unknown
+			ConfigDescription val = new ConfigDescription(description.Description + (synchronizedSetting ? " [Synced with Server]" : " [Not Synced with Server]"), description.AcceptableValues, description.Tags);
+			ConfigEntry<T> val2 = ((BaseUnityPlugin)this).Config.Bind<T>(group, name, value, val);
+			ConfigSync.AddConfigEntry<T>(val2).SynchronizedConfig = synchronizedSetting;
+			return val2;
+		}
+
+		private ConfigEntry<T> config<T>(string group, string name, T value, string description, bool synchronizedSetting = true)
+		{
+			//IL_000c: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0018: Expected O, but got Unknown
+			return config(group, name, value, new ConfigDescription(description, (AcceptableValueBase)null, Array.Empty<object>()), synchronizedSetting);
+		}
+
+		static VeinMinePlugin()
+		{
+			string configPath = Paths.ConfigPath;
+			char directorySeparatorChar = Path.DirectorySeparatorChar;
+			ConfigFileFullPath = configPath + directorySeparatorChar + ConfigFileName;
+			ConnectionError = "";
+			logger = Logger.CreateLogSource("Veinmine");
+			ConfigSync = new ConfigSync("com.wisehorror.Veinmine")
+			{
+				DisplayName = "Veinmine",
+				CurrentVersion = "1.3.1",
+				MinimumRequiredVersion = "1.3.1"
+			};
+			_serverConfigLocked = null;
+			veinMineKey = null;
+			veinMineDurability = null;
+			removeEffects = null;
+			progressiveMode = null;
+			enableSpreadDamage = null;
+			spreadDamageType = null;
+			progressiveMult = null;
+			durabilityMult = null;
+			xpMult = null;
+		}
+	}
+	public static class KeyboardExtensions
+	{
+		public static bool IsKeyDown(this KeyboardShortcut shortcut)
+		{
+			//IL_0002: Unknown result type (might be due to invalid IL or missing references)
+			//IL_000b: Unknown result type (might be due to invalid IL or missing references)
+			if ((int)((KeyboardShortcut)(ref shortcut)).MainKey != 0 && Input.GetKeyDown(((KeyboardShortcut)(ref shortcut)).MainKey))
+			{
+				return ((KeyboardShortcut)(ref shortcut)).Modifiers.All((Func<KeyCode, bool>)Input.GetKey);
+			}
+			return false;
+		}
+
+		public static bool IsKeyHeld(this KeyboardShortcut shortcut)
+		{
+			//IL_0002: Unknown result type (might be due to invalid IL or missing references)
+			//IL_000b: Unknown result type (might be due to invalid IL or missing references)
+			if ((int)((KeyboardShortcut)(ref shortcut)).MainKey != 0 && Input.GetKey(((KeyboardShortcut)(ref shortcut)).MainKey))
+			{
+				return ((KeyboardShortcut)(ref shortcut)).Modifiers.All((Func<KeyCode, bool>)Input.GetKey);
+			}
+			return false;
+		}
+	}
+	[HarmonyPatch(typeof(ZNet), "OnNewConnection")]
+	public static class RegisterAndCheckVersion
+	{
+		private static void Prefix(ZNetPeer peer, ref ZNet __instance)
+		{
+			//IL_003a: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0040: Expected O, but got Unknown
+			VeinMinePlugin.logger.LogDebug((object)"Registering version RPC handler");
+			peer.m_rpc.Register<ZPackage>("Veinmine_VersionCheck", (Action<ZRpc, ZPackage>)RpcHandlers.RPC_Recycle_N_Reclaim_Version);
+			VeinMinePlugin.logger.LogInfo((object)"Invoking version check");
+			ZPackage val = new ZPackage();
+			val.Write("1.3.1");
+			peer.m_rpc.Invoke("Veinmine_VersionCheck", new object[1] { val });
+		}
+	}
+	[HarmonyPatch(typeof(ZNet), "RPC_PeerInfo")]
+	public static class VerifyClient
+	{
+		private static bool Prefix(ZRpc rpc, ZPackage pkg, ref ZNet __instance)
+		{
+			if (!__instance.IsServer() || RpcHandlers.ValidatedPeers.Contains(rpc))
+			{
+				return true;
+			}
+			VeinMinePlugin.logger.LogWarning((object)("Peer (" + rpc.m_socket.GetHostName() + ") never sent version or couldn't due to previous disconnect, disconnecting"));
+			rpc.Invoke("Error", new object[1] { 3 });
+			return false;
+		}
+
+		private static void Postfix(ZNet __instance)
+		{
+			//IL_001c: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0022: Expected O, but got Unknown
+			ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.instance.GetServerPeerID(), "VeinmineRequestAdminSync", new object[1] { (object)new ZPackage() });
+		}
+	}
+	[HarmonyPatch(typeof(FejdStartup), "ShowConnectError")]
+	public class ShowConnectionError
+	{
+		private static void Postfix(FejdStartup __instance)
+		{
+			if (__instance.m_connectionFailedPanel.activeSelf)
+			{
+				__instance.m_connectionFailedError.fontSizeMax = 25f;
+				__instance.m_connectionFailedError.fontSizeMin = 15f;
+				TMP_Text connectionFailedError = __instance.m_connectionFailedError;
+				connectionFailedError.text = connectionFailedError.text + "\n" + VeinMinePlugin.ConnectionError;
+			}
+		}
+	}
+	[HarmonyPatch(typeof(ZNet), "Disconnect")]
+	public static class RemoveDisconnectedPeerFromVerified
+	{
+		private static void Prefix(ZNetPeer peer, ref ZNet __instance)
+		{
+			if (__instance.IsServer())
+			{
+				VeinMinePlugin.logger.LogInfo((object)("Peer (" + peer.m_rpc.m_socket.GetHostName() + ") disconnected, removing from validated list"));
+				RpcHandlers.ValidatedPeers.Remove(peer.m_rpc);
+			}
+		}
+	}
+	public static class RpcHandlers
+	{
+		public static readonly List<ZRpc> ValidatedPeers = new List<ZRpc>();
+
+		public static void RPC_Recycle_N_Reclaim_Version(ZRpc rpc, ZPackage pkg)
+		{
+			string text = pkg.ReadString();
+			VeinMinePlugin.logger.LogInfo((object)("Hash/Version check, local: 1.3.1 remote: " + text));
+			if (text != "1.3.1")
+			{
+				VeinMinePlugin.ConnectionError = "Veinmine Installed: 1.3.1\n Needed: " + text;
+				if (ZNet.instance.IsServer())
+				{
+					VeinMinePlugin.logger.LogWarning((object)("Peer (" + rpc.m_socket.GetHostName() + ") has incompatible version, disconnecting..."));
+					rpc.Invoke("Error", new object[1] { 3 });
+				}
+			}
+			else if (!ZNet.instance.IsServer())
+			{
+				VeinMinePlugin.logger.LogInfo((object)"Received same version from server!");
+			}
+			else
+			{
+				VeinMinePlugin.logger.LogInfo((object)("Adding peer (" + rpc.m_socket.GetHostName() + ") to validated list"));
+				ValidatedPeers.Add(rpc);
+			}
+		}
+	}
+}
+namespace ServerSync
+{
+	[PublicAPI]
+	internal abstract class OwnConfigEntryBase
+	{
+		public object? LocalBaseValue;
+
+		public bool SynchronizedConfig = true;
+
+		public abstract ConfigEntryBase BaseConfig { get; }
+	}
+	[PublicAPI]
+	internal class SyncedConfigEntry<T> : OwnConfigEntryBase
+	{
+		public readonly ConfigEntry<T> SourceConfig;
+
+		public override ConfigEntryBase BaseConfig => (ConfigEntryBase)(object)SourceConfig;
+
+		public T Value
+		{
+			get
+			{
+				return SourceConfig.Value;
+			}
+			set
+			{
+				SourceConfig.Value = value;
+			}
+		}
+
+		public SyncedConfigEntry(ConfigEntry<T> sourceConfig)
+		{
+			SourceConfig = sourceConfig;
+			base..ctor();
+		}
+
+		public void AssignLocalValue(T value)
+		{
+			if (LocalBaseValue == null)
+			{
+				Value = value;
+			}
+			else
+			{
+				LocalBaseValue = value;
+			}
+		}
+	}
+	internal abstract class CustomSyncedValueBase
+	{
+		public object? LocalBaseValue;
+
+		public readonly string Identifier;
+
+		public readonly Type Type;
+
+		private object? boxedValue;
+
+		protected bool localIsOwner;
+
+		public readonly int Priority;
+
+		public object? BoxedValue
+		{
+			get
+			{
+				return boxedValue;
+			}
+			set
+			{
+				boxedValue = value;
+				this.ValueChanged?.Invoke();
+			}
+		}
+
+		public event Action? ValueChanged;
+
+		protected CustomSyncedValueBase(ConfigSync configSync, string identifier, Type type, int priority)
+		{
+			Priority = priority;
+			Identifier = identifier;
+			Type = type;
+			configSync.AddCustomValue(this);
+			localIsOwner = configSync.IsSourceOfTruth;
+			configSync.SourceOfTruthChanged += delegate(bool truth)
+			{
+				localIsOwner = truth;
+			};
+		}
+	}
+	[PublicAPI]
+	internal sealed class CustomSyncedValue<T> : CustomSyncedValueBase
+	{
+		public T Value
+		{
+			get
+			{
+				return (T)base.BoxedValue;
+			}
+			set
+			{
+				base.BoxedValue = value;
+			}
+		}
+
+		public CustomSyncedValue(ConfigSync configSync, string identifier, T value = default(T), int priority = 0)
+			: base(configSync, identifier, typeof(T), priority)
+		{
+			Value = value;
+		}
+
+		public void AssignLocalValue(T value)
+		{
+			if (localIsOwner)
+			{
+				Value = value;
+			}
+			else
+			{
+				LocalBaseValue = value;
+			}
+		}
+	}
+	internal class ConfigurationManagerAttributes
+	{
+		[UsedImplicitly]
+		public bool? ReadOnly = false;
+	}
+	[PublicAPI]
+	internal class ConfigSync
+	{
+		[HarmonyPatch(typeof(ZRpc), "HandlePackage")]
+		private static class SnatchCurrentlyHandlingRPC
+		{
+			public static ZRpc? currentRpc;
+
+			[HarmonyPrefix]
+			private static void Prefix(ZRpc __instance)
+			{
+				currentRpc = __instance;
+			}
+		}
+
+		[HarmonyPatch(typeof(ZNet), "Awake")]
+		internal static class RegisterRPCPatch
+		{
+			[HarmonyPostfix]
+			private static void Postfix(ZNet __instance)
+			{
+				isServer = __instance.IsServer();
+				foreach (ConfigSync configSync2 in configSyncs)
+				{
+					ZRoutedRpc.instance.Register<ZPackage>(configSync2.Name + " ConfigSync", (Action<long, ZPackage>)configSync2.RPC_FromOtherClientConfigSync);
+					if (isServer)
+					{
+						configSync2.InitialSyncDone = true;
+						Debug.Log((object)("Registered '" + configSync2.Name + " ConfigSync' RPC - waiting for incoming connections"));
+					}
+				}
+				if (isServer)
+				{
+					((MonoBehaviour)__instance).StartCoroutine(WatchAdminListChanges());
+				}
+				static void SendAdmin(List<ZNetPeer> peers, bool isAdmin)
+				{
+					ZPackage package = ConfigsToPackage(null, null, new PackageEntry[1]
+					{
+						new PackageEntry
+						{
+							section = "Internal",
+							key = "lockexempt",
+							type = typeof(bool),
+							value = isAdmin
+						}
+					});
+					ConfigSync configSync = configSyncs.First();
+					if (configSync != null)
+					{
+						((MonoBehaviour)ZNet.instance).StartCoroutine(configSync.sendZPackage(peers, package));
+					}
+				}
+				static IEnumerator WatchAdminListChanges()
+				{
+					MethodInfo listContainsId = AccessTools.DeclaredMethod(typeof(ZNet), "ListContainsId", (Type[])null, (Type[])null);
+					SyncedList adminList = (SyncedList)AccessTools.DeclaredField(typeof(ZNet), "m_adminList").GetValue(ZNet.instance);
+					List<string> CurrentList = new List<string>(adminList.GetList());
+					while (true)
+					{
+						yield return (object)new WaitForSeconds(30f);
+						if (!adminList.GetList().SequenceEqual(CurrentList))
+						{
+							CurrentList = new List<string>(adminList.GetList());
+							List<ZNetPeer> adminPeer = ZNet.instance.GetPeers().Where(delegate(ZNetPeer p)
+							{
+								string hostName = p.m_rpc.GetSocket().GetHostName();
+								return ((object)listContainsId == null) ? adminList.Contains(hostName) : ((bool)listContainsId.Invoke(ZNet.instance, new object[2] { adminList, hostName }));
+							}).ToList();
+							List<ZNetPeer> nonAdminPeer = ZNet.instance.GetPeers().Except(adminPeer).ToList();
+							SendAdmin(nonAdminPeer, isAdmin: false);
+							SendAdmin(adminPeer, isAdmin: true);
+						}
+					}
+				}
+			}
+		}
+
+		[HarmonyPatch(typeof(ZNet), "OnNewConnection")]
+		private static class RegisterClientRPCPatch
+		{
+			[HarmonyPostfix]
+			private static void Postfix(ZNet __instance, ZNetPeer peer)
+			{
+				if (__instance.IsServer())
+				{
+					return;
+				}
+				foreach (ConfigSync configSync in configSyncs)
+				{
+					peer.m_rpc.Register<ZPackage>(configSync.Name + " ConfigSync", (Action<ZRpc, ZPackage>)configSync.RPC_FromServerConfigSync);
+				}
+			}
+		}
+
+		private class ParsedConfigs
+		{
+			public readonly Dictionary<OwnConfigEntryBase, object?> configValues = new Dictionary<OwnConfigEntryBase, object>();
+
+			public readonly Dictionary<CustomSyncedValueBase, object?> customValues = new Dictionary<CustomSyncedValueBase, object>();
+		}
+
+		[HarmonyPatch(typeof(ZNet), "Shutdown")]
+		private class ResetConfigsOnShutdown
+		{
+			[HarmonyPostfix]
+			private static void Postfix()
+			{
+				ProcessingServerUpdate = true;
+				foreach (ConfigSync configSync in configSyncs)
+				{
+					configSync.resetConfigsFromServer();
+					configSync.IsSourceOfTruth = true;
+					configSync.InitialSyncDone = false;
+				}
+				ProcessingServerUpdate = false;
+			}
+		}
+
+		[HarmonyPatch(typeof(ZNet), "RPC_PeerInfo")]
+		private class SendConfigsAfterLogin
+		{
+			private class BufferingSocket : ZPlayFabSocket, ISocket
+			{
+				public volatile bool finished = false;
+
+				public volatile int versionMatchQueued = -1;
+
+				public readonly List<ZPackage> Package = new List<ZPackage>();
+
+				public readonly ISocket Original;
+
+				public BufferingSocket(ISocket original)
+				{
+					Original = original;
+					((ZPlayFabSocket)this)..ctor();
+				}
+
+				public bool IsConnected()
+				{
+					return Original.IsConnected();
+				}
+
+				public ZPackage Recv()
+				{
+					return Original.Recv();
+				}
+
+				public int GetSendQueueSize()
+				{
+					return Original.GetSendQueueSize();
+				}
+
+				public int GetCurrentSendRate()
+				{
+					return Original.GetCurrentSendRate();
+				}
+
+				public bool IsHost()
+				{
+					return Original.IsHost();
+				}
+
+				public void Dispose()
+				{
+					Original.Dispose();
+				}
+
+				public bool GotNewData()
+				{
+					return Original.GotNewData();
+				}
+
+				public void Close()
+				{
+					Original.Close();
+				}
+
+				public string GetEndPointString()
+				{
+					return Original.GetEndPointString();
+				}
+
+				public void GetAndResetStats(out int totalSent, out int totalRecv)
+				{
+					Original.GetAndResetStats(ref totalSent, ref totalRecv);
+				}
+
+				public void GetConnectionQuality(out float localQuality, out float remoteQuality, out int ping, out float outByteSec, out float inByteSec)
+				{
+					Original.GetConnectionQuality(ref localQuality, ref remoteQuality, ref ping, ref outByteSec, ref inByteSec);
+				}
+
+				public ISocket Accept()
+				{
+					return Original.Accept();
+				}
+
+				public int GetHostPort()
+				{
+					return Original.GetHostPort();
+				}
+
+				public bool Flush()
+				{
+					return Original.Flush();
+				}
+
+				public string GetHostName()
+				{
+					return Original.GetHostName();
+				}
+
+				public void VersionMatch()
+				{
+					if (finished)
+					{
+						Original.VersionMatch();
+					}
+					else
+					{
+						versionMatchQueued = Package.Count;
+					}
+				}
+
+				public void Send(ZPackage pkg)
+				{
+					//IL_0057: Unknown result type (might be due to invalid IL or missing references)
+					//IL_005d: Expected O, but got Unknown
+					int pos = pkg.GetPos();
+					pkg.SetPos(0);
+					int num = pkg.ReadInt();
+					if ((num == StringExtensionMethods.GetStableHashCode("PeerInfo") || num == StringExtensionMethods.GetStableHashCode("RoutedRPC") || num == StringExtensionMethods.GetStableHashCode("ZDOData")) && !finished)
+					{
+						ZPackage val = new ZPackage(pkg.GetArray());
+						val.SetPos(pos);
+						Package.Add(val);
+					}
+					else
+					{
+						pkg.SetPos(pos);
+						Original.Send(pkg);
+					}
+				}
+			}
+
+			[HarmonyPriority(800)]
+			[HarmonyPrefix]
+			private static void Prefix(ref Dictionary<Assembly, BufferingSocket>? __state, ZNet __instance, ZRpc rpc)
+			{
+				//IL_0078: Unknown result type (might be due to invalid IL or missing references)
+				//IL_007e: Invalid comparison between Unknown and I4
+				if (!__instance.IsServer())
+				{
+					return;
+				}
+				BufferingSocket bufferingSocket = new BufferingSocket(rpc.GetSocket());
+				AccessTools.DeclaredField(typeof(ZRpc), "m_socket").SetValue(rpc, bufferingSocket);
+				object? obj = AccessTools.DeclaredMethod(typeof(ZNet), "GetPeer", new Type[1] { typeof(ZRpc) }, (Type[])null).Invoke(__instance, new object[1] { rpc });
+				ZNetPeer val = (ZNetPeer)((obj is ZNetPeer) ? obj : null);
+				if (val != null && (int)ZNet.m_onlineBackend > 0)
+				{
+					FieldInfo fieldInfo = AccessTools.DeclaredField(typeof(ZNetPeer), "m_socket");
+					object? value = fieldInfo.GetValue(val);
+					ZPlayFabSocket val2 = (ZPlayFabSocket)((value is ZPlayFabSocket) ? value : null);
+					if (val2 != null)
+					{
+						typeof(ZPlayFabSocket).GetField("m_remotePlayerId").SetValue(bufferingSocket, val2.m_remotePlayerId);
+					}
+					fieldInfo.SetValue(val, bufferingSocket);
+				}
+				if (__state == null)
+				{
+					__state = new Dictionary<Assembly, BufferingSocket>();
+				}
+				__state[Assembly.GetExecutingAssembly()] = bufferingSocket;
+			}
+
+			[HarmonyPostfix]
+			private static void Postfix(Dictionary<Assembly, BufferingSocket> __state, ZNet __instance, ZRpc rpc)
+			{
+				ZRpc rpc2 = rpc;
+				ZNet __instance2 = __instance;
+				Dictionary<Assembly, BufferingSocket> __state2 = __state;
+				ZNetPeer peer;
+				if (__instance2.IsServer())
+				{
+					object obj = AccessTools.DeclaredMethod(typeof(ZNet), "GetPeer", new Type[1] { typeof(ZRpc) }, (Type[])null).Invoke(__instance2, new object[1] { rpc2 });
+					peer = (ZNetPeer)((obj is ZNetPeer) ? obj : null);
+					if (peer == null)
+					{
+						SendBufferedData();
+					}
+					else
+					{
+						((MonoBehaviour)__instance2).StartCoroutine(sendAsync());
+					}
+				}
+				void SendBufferedData()
+				{
+					if (rpc2.GetSocket() is BufferingSocket bufferingSocket)
+					{
+						AccessTools.DeclaredField(typeof(ZRpc), "m_socket").SetValue(rpc2, bufferingSocket.Original);
+						object? obj2 = AccessTools.DeclaredMethod(typeof(ZNet), "GetPeer", new Type[1] { typeof(ZRpc) }, (Type[])null).Invoke(__instance2, new object[1] { rpc2 });
+						ZNetPeer val = (ZNetPeer)((obj2 is ZNetPeer) ? obj2 : null);
+						if (val != null)
+						{
+							AccessTools.DeclaredField(typeof(ZNetPeer), "m_socket").SetValue(val, bufferingSocket.Original);
+						}
+					}
+					BufferingSocket bufferingSocket2 = __state2[Assembly.GetExecutingAssembly()];
+					bufferingSocket2.finished = true;
+					for (int i = 0; i < bufferingSocket2.Package.Count; i++)
+					{
+						if (i == bufferingSocket2.versionMatchQueued)
+						{
+							bufferingSocket2.Original.VersionMatch();
+						}
+						bufferingSocket2.Original.Send(bufferingSocket2.Package[i]);
+					}
+					if (bufferingSocket2.Package.Count == bufferingSocket2.versionMatchQueued)
+					{
+						bufferingSocket2.Original.VersionMatch();
+					}
+				}
+				IEnumerator sendAsync()
+				{
+					foreach (ConfigSync configSync in configSyncs)
+					{
+						List<PackageEntry> entries = new List<PackageEntry>();
+						if (configSync.CurrentVersion != null)
+						{
+							entries.Add(new PackageEntry
+							{
+								section = "Internal",
+								key = "serverversion",
+								type = typeof(string),
+								value = configSync.CurrentVersion
+							});
+						}
+						MethodInfo listContainsId = AccessTools.DeclaredMethod(typeof(ZNet), "ListContainsId", (Type[])null, (Type[])null);
+						SyncedList adminList = (SyncedList)AccessTools.DeclaredField(typeof(ZNet), "m_adminList").GetValue(ZNet.instance);
+						entries.Add(new PackageEntry
+						{
+							section = "Internal",
+							key = "lockexempt",
+							type = typeof(bool),
+							value = (((object)listContainsId == null) ? ((object)adminList.Contains(rpc2.GetSocket().GetHostName())) : listContainsId.Invoke(ZNet.instance, new object[2]
+							{
+								adminList,
+								rpc2.GetSocket().GetHostName()
+							}))
+						});
+						ZPackage package = ConfigsToPackage(configSync.allConfigs.Select((OwnConfigEntryBase c) => c.BaseConfig), configSync.allCustomValues, entries, partial: false);
+						yield return ((MonoBehaviour)__instance2).StartCoroutine(configSync.sendZPackage(new List<ZNetPeer> { peer }, package));
+					}
+					SendBufferedData();
+				}
+			}
+		}
+
+		private class PackageEntry
+		{
+			public string section = null;
+
+			public string key = null;
+
+			public Type type = null;
+
+			public object? value;
+		}
+
+		[HarmonyPatch(typeof(ConfigEntryBase), "GetSerializedValue")]
+		private static class PreventSavingServerInfo
+		{
+			[HarmonyPrefix]
+			private static bool Prefix(ConfigEntryBase __instance, ref string __result)
+			{
+				OwnConfigEntryBase ownConfigEntryBase = configData(__instance);
+				if (ownConfigEntryBase == null || isWritableConfig(ownConfigEntryBase))
+				{
+					return true;
+				}
+				__result = TomlTypeConverter.ConvertToString(ownConfigEntryBase.LocalBaseValue, __instance.SettingType);
+				return false;
+			}
+		}
+
+		[HarmonyPatch(typeof(ConfigEntryBase), "SetSerializedValue")]
+		private static class PreventConfigRereadChangingValues
+		{
+			[HarmonyPrefix]
+			private static bool Prefix(ConfigEntryBase __instance, string value)
+			{
+				OwnConfigEntryBase ownConfigEntryBase = configData(__instance);
+				if (ownConfigEntryBase == null || ownConfigEntryBase.LocalBaseValue == null)
+				{
+					return true;
+				}
+				try
+				{
+					ownConfigEntryBase.LocalBaseValue = TomlTypeConverter.ConvertToValue(value, __instance.SettingType);
+				}
+				catch (Exception ex)
+				{
+					Debug.LogWarning((object)$"Config value of setting \"{__instance.Definition}\" could not be parsed and will be ignored. Reason: {ex.Message}; Value: {value}");
+				}
+				return false;
+			}
+		}
+
+		private class InvalidDeserializationTypeException : Exception
+		{
+			public string expected = null;
+
+			public string received = null;
+
+			public string field = "";
+		}
+
+		public static bool ProcessingServerUpdate;
+
+		public readonly string Name;
+
+		public string? DisplayName;
+
+		public string? CurrentVersion;
+
+		public string? MinimumRequiredVersion;
+
+		public bool ModRequired = false;
+
+		private bool? forceConfigLocking;
+
+		private bool isSourceOfTruth = true;
+
+		private static readonly HashSet<ConfigSync> configSyncs;
+
+		private readonly HashSet<OwnConfigEntryBase> allConfigs = new HashSet<OwnConfigEntryBase>();
+
+		private HashSet<CustomSyncedValueBase> allCustomValues = new HashSet<CustomSyncedValueBase>();
+
+		private static bool isServer;
+
+		private static bool lockExempt;
+
+		private OwnConfigEntryBase? lockedConfig = null;
+
+		private const byte PARTIAL_CONFIGS = 1;
+
+		private const byte FRAGMENTED_CONFIG = 2;
+
+		private const byte COMPRESSED_CONFIG = 4;
+
+		private readonly Dictionary<string, SortedDictionary<int, byte[]>> configValueCache = new Dictionary<string, SortedDictionary<int, byte[]>>();
+
+		private readonly List<KeyValuePair<long, string>> cacheExpirations = new List<KeyValuePair<long, string>>();
+
+		private static long packageCounter;
+
+		public bool IsLocked
+		{
+			get
+			{
+				bool? flag = forceConfigLocking;
+				bool num;
+				if (!flag.HasValue)
+				{
+					if (lockedConfig == null)
+					{
+						goto IL_0052;
+					}
+					num = ((IConvertible)lockedConfig.BaseConfig.BoxedValue).ToInt32(CultureInfo.InvariantCulture) != 0;
+				}
+				else
+				{
+					num = flag.GetValueOrDefault();
+				}
+				if (!num)
+				{
+					goto IL_0052;
+				}
+				int result = ((!lockExempt) ? 1 : 0);
+				goto IL_0053;
+				IL_0053:
+				return (byte)result != 0;
+				IL_0052:
+				result = 0;
+				goto IL_0053;
+			}
+			set
+			{
+				forceConfigLocking = value;
+			}
+		}
+
+		public bool IsAdmin => lockExempt || isSourceOfTruth;
+
+		public bool IsSourceOfTruth
+		{
+			get
+			{
+				return isSourceOfTruth;
+			}
+			private set
+			{
+				if (value != isSourceOfTruth)
+				{
+					isSourceOfTruth = value;
+					this.SourceOfTruthChanged?.Invoke(value);
+				}
+			}
+		}
+
+		public bool InitialSyncDone { get; private set; } = false;
+
+
+		public event Action<bool>? SourceOfTruthChanged;
+
+		private event Action? lockedConfigChanged;
+
+		static ConfigSync()
+		{
+			ProcessingServerUpdate = false;
+			configSyncs = new HashSet<ConfigSync>();
+			lockExempt = false;
+			packageCounter = 0L;
+			RuntimeHelpers.RunClassConstructor(typeof(VersionCheck).TypeHandle);
+		}
+
+		public ConfigSync(string name)
+		{
+			Name = name;
+			configSyncs.Add(this);
+			new VersionCheck(this);
+		}
+
+		public SyncedConfigEntry<T> AddConfigEntry<T>(ConfigEntry<T> configEntry)
+		{
+			ConfigEntry<T> configEntry2 = configEntry;
+			OwnConfigEntryBase ownConfigEntryBase = configData((ConfigEntryBase)(object)configEntry2);
+			SyncedConfigEntry<T> syncedEntry = ownConfigEntryBase as SyncedConfigEntry<T>;
+			if (syncedEntry == null)
+			{
+				syncedEntry = new SyncedConfigEntry<T>(configEntry2);
+				AccessTools.DeclaredField(typeof(ConfigDescription), "<Tags>k__BackingField").SetValue(((ConfigEntryBase)configEntry2).Description, new object[1]
+				{
+					new ConfigurationManagerAttributes()
+				}.Concat(((ConfigEntryBase)configEntry2).Description.Tags ?? Array.Empty<object>()).Concat(new SyncedConfigEntry<T>[1] { syncedEntry }).ToArray());
+				configEntry2.SettingChanged += delegate
+				{
+					if (!ProcessingServerUpdate && syncedEntry.SynchronizedConfig)
+					{
+						Broadcast(ZRoutedRpc.Everybody, (ConfigEntryBase)configEntry2);
+					}
+				};
+				allConfigs.Add(syncedEntry);
+			}
+			return syncedEntry;
+		}
+
+		public SyncedConfigEntry<T> AddLockingConfigEntry<T>(ConfigEntry<T> lockingConfig) where T : IConvertible
+		{
+			if (lockedConfig != null)
+			{
+				throw new Exception("Cannot initialize locking ConfigEntry twice");
+			}
+			lockedConfig = AddConfigEntry<T>(lockingConfig);
+			lockingConfig.SettingChanged += delegate
+			{
+				this.lockedConfigChanged?.Invoke();
+			};
+			return (SyncedConfigEntry<T>)lockedConfig;
+		}
+
+		internal void AddCustomValue(CustomSyncedValueBase customValue)
+		{
+			CustomSyncedValueBase customValue2 = customValue;
+			if (allCustomValues.Select((CustomSyncedValueBase v) => v.Identifier).Concat(new string[1] { "serverversion" }).Contains(customValue2.Identifier))
+			{
+				throw new Exception("Cannot have multiple settings with the same name or with a reserved name (serverversion)");
+			}
+			allCustomValues.Add(customValue2);
+			allCustomValues = new HashSet<CustomSyncedValueBase>(allCustomValues.OrderByDescending((CustomSyncedValueBase v) => v.Priority));
+			customValue2.ValueChanged += delegate
+			{
+				if (!ProcessingServerUpdate)
+				{
+					Broadcast(ZRoutedRpc.Everybody, customValue2);
+				}
+			};
+		}
+
+		private void RPC_FromServerConfigSync(ZRpc rpc, ZPackage package)
+		{
+			lockedConfigChanged += serverLockedSettingChanged;
+			IsSourceOfTruth = false;
+			if (HandleConfigSyncRPC(0L, package, clientUpdate: false))
+			{
+				InitialSyncDone = true;
+			}
+		}
+
+		private void RPC_FromOtherClientConfigSync(long sender, ZPackage package)
+		{
+			HandleConfigSyncRPC(sender, package, clientUpdate: true);
+		}
+
+		private bool HandleConfigSyncRPC(long sender, ZPackage package, bool clientUpdate)
+		{
+			//IL_0076: Unknown result type (might be due to invalid IL or missing references)
+			//IL_007d: Expected O, but got Unknown
+			//IL_0250: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0257: Expected O, but got Unknown
+			//IL_01ea: Unknown result type (might be due to invalid IL or missing references)
+			//IL_01f1: Expected O, but got Unknown
+			try
+			{
+				if (isServer && IsLocked)
+				{
+					ZRpc? currentRpc = SnatchCurrentlyHandlingRPC.currentRpc;
+					object obj;
+					if (currentRpc == null)
+					{
+						obj = null;
+					}
+					else
+					{
+						ISocket socket = currentRpc.GetSocket();
+						obj = ((socket != null) ? socket.GetHostName() : null);
+					}
+					string text = (string)obj;
+					if (text != null)
+					{
+						MethodInfo methodInfo = AccessTools.DeclaredMethod(typeof(ZNet), "ListContainsId", (Type[])null, (Type[])null);
+						SyncedList val = (SyncedList)AccessTools.DeclaredField(typeof(ZNet), "m_adminList").GetValue(ZNet.instance);
+						if (!(((object)methodInfo == null) ? val.Contains(text) : ((bool)methodInfo.Invoke(ZNet.instance, new object[2] { val, text }))))
+						{
+							return false;
+						}
+					}
+				}
+				cacheExpirations.RemoveAll(delegate(KeyValuePair<long, string> kv)
+				{
+					if (kv.Key < DateTimeOffset.Now.Ticks)
+					{
+						configValueCache.Remove(kv.Value);
+						return true;
+					}
+					return false;
+				});
+				byte b = package.ReadByte();
+				if ((b & 2u) != 0)
+				{
+					long num = package.ReadLong();
+					string text2 = sender.ToString() + num;
+					if (!configValueCache.TryGetValue(text2, out SortedDictionary<int, byte[]> value))
+					{
+						value = new SortedDictionary<int, byte[]>();
+						configValueCache[text2] = value;
+						cacheExpirations.Add(new KeyValuePair<long, string>(DateTimeOffset.Now.AddSeconds(60.0).Ticks, text2));
+					}
+					int key = package.ReadInt();
+					int num2 = package.ReadInt();
+					value.Add(key, package.ReadByteArray());
+					if (value.Count < num2)
+					{
+						return false;
+					}
+					configValueCache.Remove(text2);
+					package = new ZPackage(value.Values.SelectMany((byte[] a) => a).ToArray());
+					b = package.ReadByte();
+				}
+				ProcessingServerUpdate = true;
+				if ((b & 4u) != 0)
+				{
+					byte[] buffer = package.ReadByteArray();
+					MemoryStream stream = new MemoryStream(buffer);
+					MemoryStream memoryStream = new MemoryStream();
+					using (DeflateStream deflateStream = new DeflateStream(stream, CompressionMode.Decompress))
+					{
+						deflateStream.CopyTo(memoryStream);
+					}
+					package = new ZPackage(memoryStream.ToArray());
+					b = package.ReadByte();
+				}
+				if ((b & 1) == 0)
+				{
+					resetConfigsFromServer();
+				}
+				ParsedConfigs parsedConfigs = ReadConfigsFromPackage(package);
+				ConfigFile val2 = null;
+				bool saveOnConfigSet = false;
+				foreach (KeyValuePair<OwnConfigEntryBase, object> configValue in parsedConfigs.configValues)
+				{
+					if (!isServer && configValue.Key.LocalBaseValue == null)
+					{
+						configValue.Key.LocalBaseValue = configValue.Key.BaseConfig.BoxedValue;
+					}
+					if (val2 == null)
+					{
+						val2 = configValue.Key.BaseConfig.ConfigFile;
+						saveOnConfigSet = val2.SaveOnConfigSet;
+						val2.SaveOnConfigSet = false;
+					}
+					configValue.Key.BaseConfig.BoxedValue = configValue.Value;
+				}
+				if (val2 != null)
+				{
+					val2.SaveOnConfigSet = saveOnConfigSet;
+				}
+				foreach (KeyValuePair<CustomSyncedValueBase, object> customValue in parsedConfigs.customValues)
+				{
+					if (!isServer)
+					{
+						CustomSyncedValueBase key2 = customValue.Key;
+						if (key2.LocalBaseValue == null)
+						{
+							key2.LocalBaseValue = customValue.Key.BoxedValue;
+						}
+					}
+					customValue.Key.BoxedValue = customValue.Value;
+				}
+				Debug.Log((object)string.Format("Received {0} configs and {1} custom values from {2} for mod {3}", parsedConfigs.configValues.Count, parsedConfigs.customValues.Count, (isServer || clientUpdate) ? $"client {sender}" : "the server", DisplayName ?? Name));
+				if (!isServer)
+				{
+					serverLockedSettingChanged();
+				}
+				return true;
+			}
+			finally
+			{
+				ProcessingServerUpdate = false;
+			}
+		}
+
+		private ParsedConfigs ReadConfigsFromPackage(ZPackage package)
+		{
+			ParsedConfigs parsedConfigs = new ParsedConfigs();
+			Dictionary<string, OwnConfigEntryBase> dictionary = allConfigs.Where((OwnConfigEntryBase c) => c.SynchronizedConfig).ToDictionary((OwnConfigEntryBase c) => c.BaseConfig.Definition.Section + "_" + c.BaseConfig.Definition.Key, (OwnConfigEntryBase c) => c);
+			Dictionary<string, CustomSyncedValueBase> dictionary2 = allCustomValues.ToDictionary((CustomSyncedValueBase c) => c.Identifier, (CustomSyncedValueBase c) => c);
+			int num = package.ReadInt();
+			for (int i = 0; i < num; i++)
+			{
+				string text = package.ReadString();
+				string text2 = package.ReadString();
+				string text3 = package.ReadString();
+				Type type = Type.GetType(text3);
+				if (text3 == "" || type != null)
+				{
+					object obj;
+					try
+					{
+						obj = ((text3 == "") ? null : ReadValueWithTypeFromZPackage(package, type));
+					}
+					catch (InvalidDeserializationTypeException ex)
+					{
+						Debug.LogWarning((object)("Got unexpected struct internal type " + ex.received + " for field " + ex.field + " struct " + text3 + " for " + text2 + " in section " + text + " for mod " + (DisplayName ?? Name) + ", expecting " + ex.expected));
+						continue;
+					}
+					OwnConfigEntryBase value2;
+					if (text == "Internal")
+					{
+						CustomSyncedValueBase value;
+						if (text2 == "serverversion")
+						{
+							if (obj?.ToString() != CurrentVersion)
+							{
+								Debug.LogWarning((object)("Received server version is not equal: server version = " + (obj?.ToString() ?? "null") + "; local version = " + (CurrentVersion ?? "unknown")));
+							}
+						}
+						else if (text2 == "lockexempt")
+						{
+							if (obj is bool flag)
+							{
+								lockExempt = flag;
+							}
+						}
+						else if (dictionary2.TryGetValue(text2, out value))
+						{
+							if ((text3 == "" && (!value.Type.IsValueType || Nullable.GetUnderlyingType(value.Type) != null)) || GetZPackageTypeString(value.Type) == text3)
+							{
+								parsedConfigs.customValues[value] = obj;
+								continue;
+							}
+							Debug.LogWarning((object)("Got unexpected type " + text3 + " for internal value " + text2 + " for mod " + (DisplayName ?? Name) + ", expecting " + value.Type.AssemblyQualifiedName));
+						}
+					}
+					else if (dictionary.TryGetValue(text + "_" + text2, out value2))
+					{
+						Type type2 = configType(value2.BaseConfig);
+						if ((text3 == "" && (!type2.IsValueType || Nullable.GetUnderlyingType(type2) != null)) || GetZPackageTypeString(type2) == text3)
+						{
+							parsedConfigs.configValues[value2] = obj;
+							continue;
+						}
+						Debug.LogWarning((object)("Got unexpected type " + text3 + " for " + text2 + " in section " + text + " for mod " + (DisplayName ?? Name) + ", expecting " + type2.AssemblyQualifiedName));
+					}
+					else
+					{
+						Debug.LogWarning((object)("Received unknown config entry " + text2 + " in section " + text + " for mod " + (DisplayName ?? Name) + ". This may happen if client and server versions of the mod do not match."));
+					}
+					continue;
+				}
+				Debug.LogWarning((object)("Got invalid type " + text3 + ", abort reading of received configs"));
+				return new ParsedConfigs();
+			}
+			return parsedConfigs;
+		}
+
+		private static bool isWritableConfig(OwnConfigEntryBase config)
+		{
+			OwnConfigEntryBase config2 = config;
+			ConfigSync configSync = configSyncs.FirstOrDefault((ConfigSync cs) => cs.allConfigs.Contains(config2));
+			if (configSync == null)
+			{
+				return true;
+			}
+			return configSync.IsSourceOfTruth || !config2.SynchronizedConfig || config2.LocalBaseValue == null || (!configSync.IsLocked && (config2 != configSync.lockedConfig || lockExempt));
+		}
+
+		private void serverLockedSettingChanged()
+		{
+			foreach (OwnConfigEntryBase allConfig in allConfigs)
+			{
+				configAttribute<ConfigurationManagerAttributes>(allConfig.BaseConfig).ReadOnly = !isWritableConfig(allConfig);
+			}
+		}
+
+		private void resetConfigsFromServer()
+		{
+			ConfigFile val = null;
+			bool saveOnConfigSet = false;
+			foreach (OwnConfigEntryBase item in allConfigs.Where((OwnConfigEntryBase config) => config.LocalBaseValue != null))
+			{
+				if (val == null)
+				{
+					val = item.BaseConfig.ConfigFile;
+					saveOnConfigSet = val.SaveOnConfigSet;
+					val.SaveOnConfigSet = false;
+				}
+				item.BaseConfig.BoxedValue = item.LocalBaseValue;
+				item.LocalBaseValue = null;
+			}
+			if (val != null)
+			{
+				val.SaveOnConfigSet = saveOnConfigSet;
+			}
+			foreach (CustomSyncedValueBase item2 in allCustomValues.Where((CustomSyncedValueBase config) => config.LocalBaseValue != null))
+			{
+				item2.BoxedValue = item2.LocalBaseValue;
+				item2.LocalBaseValue = null;
+			}
+			lockedConfigChanged -= serverLockedSettingChanged;
+			serverLockedSettingChanged();
+		}
+
+		private IEnumerator<bool> distributeConfigToPeers(ZNetPeer peer, ZPackage package)
+		{
+			ZNetPeer peer2 = peer;
+			ZRoutedRpc rpc = ZRoutedRpc.instance;
+			if (rpc == null)
+			{
+				yield break;
+			}
+			byte[] data = package.GetArray();
+			if (data != null && data.LongLength > 250000)
+			{
+				int fragments = (int)(1 + (data.LongLength - 1) / 250000);
+				long packageIdentifier = ++packageCounter;
+				int fragment = 0;
+				while (fragment < fragments)
+				{
+					foreach (bool item in waitForQueue())
+					{
+						yield return item;
+					}
+					if (peer2.m_socket.IsConnected())
+					{
+						ZPackage fragmentedPackage = new ZPackage();
+						fragmentedPackage.Write((byte)2);
+						fragmentedPackage.Write(packageIdentifier);
+						fragmentedPackage.Write(fragment);
+						fragmentedPackage.Write(fragments);
+						fragmentedPackage.Write(data.Skip(250000 * fragment).Take(250000).ToArray());
+						SendPackage(fragmentedPackage);
+						if (fragment != fragments - 1)
+						{
+							yield return true;
+						}
+						int num = fragment + 1;
+						fragment = num;
+						continue;
+					}
+					break;
+				}
+				yield break;
+			}
+			foreach (bool item2 in waitForQueue())
+			{
+				yield return item2;
+			}
+			SendPackage(package);
+			void SendPackage(ZPackage pkg)
+			{
+				string text = Name + " ConfigSync";
+				if (isServer)
+				{
+					peer2.m_rpc.Invoke(text, new object[1] { pkg });
+				}
+				else
+				{
+					rpc.InvokeRoutedRPC(peer2.m_server ? 0 : peer2.m_uid, text, new object[1] { pkg });
+				}
+			}
+			IEnumerable<bool> waitForQueue()
+			{
+				float timeout = Time.time + 30f;
+				while (peer2.m_socket.GetSendQueueSize() > 20000)
+				{
+					if (Time.time > timeout)
+					{
+						Debug.Log((object)$"Disconnecting {peer2.m_uid} after 30 seconds config sending timeout");
+						peer2.m_rpc.Invoke("Error", new object[1] { (object)(ConnectionStatus)5 });
+						ZNet.instance.Disconnect(peer2);
+						break;
+					}
+					yield return false;
+				}
+			}
+		}
+
+		private IEnumerator sendZPackage(long target, ZPackage package)
+		{
+			if (!Object.op_Implicit((Object)(object)ZNet.instance))
+			{
+				return Enumerable.Empty<object>().GetEnumerator();
+			}
+			List<ZNetPeer> list = (List<ZNetPeer>)AccessTools.DeclaredField(typeof(ZRoutedRpc), "m_peers").GetValue(ZRoutedRpc.instance);
+			if (target != ZRoutedRpc.Everybody)
+			{
+				list = list.Where((ZNetPeer p) => p.m_uid == target).ToList();
+			}
+			return sendZPackage(list, package);
+		}
+
+		private IEnumerator sendZPackage(List<ZNetPeer> peers, ZPackage package)
+		{
+			ZPackage package2 = package;
+			if (!Object.op_Implicit((Object)(object)ZNet.instance))
+			{
+				yield break;
+			}
+			byte[] rawData = package2.GetArray();
+			if (rawData != null && rawData.LongLength > 10000)
+			{
+				ZPackage compressedPackage = new ZPackage();
+				compressedPackage.Write((byte)4);
+				MemoryStream output = new MemoryStream();
+				using (DeflateStream deflateStream = new DeflateStream(output, CompressionLevel.Optimal))
+				{
+					deflateStream.Write(rawData, 0, rawData.Length);
+				}
+				compressedPackage.Write(output.ToArray());
+				package2 = compressedPackage;
+			}
+			List<IEnumerator<bool>> writers = (from peer in peers
+				where peer.IsReady()
+				select peer into p
+				select distributeConfigToPeers(p, package2)).ToList();
+			writers.RemoveAll((IEnumerator<bool> writer) => !writer.MoveNext());
+			while (writers.Count > 0)
+			{
+				yield return null;
+				writers.RemoveAll((IEnumerator<bool> writer) => !writer.MoveNext());
+			}
+		}
+
+		private void Broadcast(long target, params ConfigEntryBase[] configs)
+		{
+			if (!IsLocked || isServer)
+			{
+				ZPackage package = ConfigsToPackage(configs);
+				ZNet instance = ZNet.instance;
+				if (instance != null)
+				{
+					((MonoBehaviour)instance).StartCoroutine(sendZPackage(target, package));
+				}
+			}
+		}
+
+		private void Broadcast(long target, params CustomSyncedValueBase[] customValues)
+		{
+			if (!IsLocked || isServer)
+			{
+				ZPackage package = ConfigsToPackage(null, customValues);
+				ZNet instance = ZNet.instance;
+				if (instance != null)
+				{
+					((MonoBehaviour)instance).StartCoroutine(sendZPackage(target, package));
+				}
+			}
+		}
+
+		private static OwnConfigEntryBase? configData(ConfigEntryBase config)
+		{
+			return config.Description.Tags?.OfType<OwnConfigEntryBase>().SingleOrDefault();
+		}
+
+		public static SyncedConfigEntry<T>? ConfigData<T>(ConfigEntry<T> config)
+		{
+			return ((ConfigEntryBase)config).Description.Tags?.OfType<SyncedConfigEntry<T>>().SingleOrDefault();
+		}
+
+		private static T configAttribute<T>(ConfigEntryBase config)
+		{
+			return config.Description.Tags.OfType<T>().First();
+		}
+
+		private static Type configType(ConfigEntryBase config)
+		{
+			return configType(config.SettingType);
+		}
+
+		private static Type configType(Type type)
+		{
+			return type.IsEnum ? Enum.GetUnderlyingType(type) : type;
+		}
+
+		private static ZPackage ConfigsToPackage(IEnumerable<ConfigEntryBase>? configs = null, IEnumerable<CustomSyncedValueBase>? customValues = null, IEnumerable<PackageEntry>? packageEntries = null, bool partial = true)
+		{
+			//IL_0051: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0057: Expected O, but got Unknown
+			List<ConfigEntryBase> list = configs?.Where((ConfigEntryBase config) => configData(config).SynchronizedConfig).ToList() ?? new List<ConfigEntryBase>();
+			List<CustomSyncedValueBase> list2 = customValues?.ToList() ?? new List<CustomSyncedValueBase>();
+			ZPackage val = new ZPackage();
+			val.Write((byte)(partial ? 1 : 0));
+			val.Write(list.Count + list2.Count + (packageEntries?.Count() ?? 0));
+			foreach (PackageEntry item in packageEntries ?? Array.Empty<PackageEntry>())
+			{
+				AddEntryToPackage(val, item);
+			}
+			foreach (CustomSyncedValueBase item2 in list2)
+			{
+				AddEntryToPackage(val, new PackageEntry
+				{
+					section = "Internal",
+					key = item2.Identifier,
+					type = item2.Type,
+					value = item2.BoxedValue
+				});
+			}
+			foreach (ConfigEntryBase item3 in list)
+			{
+				AddEntryToPackage(val, new PackageEntry
+				{
+					section = item3.Definition.Section,
+					key = item3.Definition.Key,
+					type = configType(item3),
+					value = item3.BoxedValue
+				});
+			}
+			return val;
+		}
+
+		private static void AddEntryToPackage(ZPackage package, PackageEntry entry)
+		{
+			package.Write(entry.section);
+			package.Write(entry.key);
+			package.Write((entry.value == null) ? "" : GetZPackageTypeString(entry.type));
+			AddValueToZPackage(package, entry.value);
+		}
+
+		private static string GetZPackageTypeString(Type type)
+		{
+			return type.AssemblyQualifiedName;
+		}
+
+		private static void AddValueToZPackage(ZPackage package, object? value)
+		{
+			Type type = value?.GetType();
+			if (value is Enum)
+			{
+				value = ((IConvertible)value).ToType(Enum.GetUnderlyingType(value.GetType()), CultureInfo.InvariantCulture);
+			}
+			else
+			{
+				if (value is ICollection collection)
+				{
+					package.Write(collection.Count);
+					{
+						foreach (object item in collection)
+						{
+							AddValueToZPackage(package, item);
+						}
+						return;
+					}
+				}
+				if ((object)type != null && type.IsValueType && !type.IsPrimitive)
+				{
+					FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					package.Write(fields.Length);
+					FieldInfo[] array = fields;
+					foreach (FieldInfo fieldInfo in array)
+					{
+						package.Write(GetZPackageTypeString(fieldInfo.FieldType));
+						AddValueToZPackage(package, fieldInfo.GetValue(value));
+					}
+					return;
+				}
+			}
+			ZRpc.Serialize(new object[1] { value }, ref package);
+		}
+
+		private static object ReadValueWithTypeFromZPackage(ZPackage package, Type type)
+		{
+			if ((object)type != null && type.IsValueType && !type.IsPrimitive && !type.IsEnum)
+			{
+				FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				int num = package.ReadInt();
+				if (num != fields.Length)
+				{
+					throw new InvalidDeserializationTypeException
+					{
+						received = $"(field count: {num})",
+						expected = $"(field count: {fields.Length})"
+					};
+				}
+				object uninitializedObject = FormatterServices.GetUninitializedObject(type);
+				FieldInfo[] array = fields;
+				foreach (FieldInfo fieldInfo in array)
+				{
+					string text = package.ReadString();
+					if (text != GetZPackageTypeString(fieldInfo.FieldType))
+					{
+						throw new InvalidDeserializationTypeException
+						{
+							received = text,
+							expected = GetZPackageTypeString(fieldInfo.FieldType),
+							field = fieldInfo.Name
+						};
+					}
+					fieldInfo.SetValue(uninitializedObject, ReadValueWithTypeFromZPackage(package, fieldInfo.FieldType));
+				}
+				return uninitializedObject;
+			}
+			if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<, >))
+			{
+				int num2 = package.ReadInt();
+				IDictionary dictionary = (IDictionary)Activator.CreateInstance(type);
+				Type type2 = typeof(KeyValuePair<, >).MakeGenericType(type.GenericTypeArguments);
+				FieldInfo field = type2.GetField("key", BindingFlags.Instance | BindingFlags.NonPublic);
+				FieldInfo field2 = type2.GetField("value", BindingFlags.Instance | BindingFlags.NonPublic);
+				for (int j = 0; j < num2; j++)
+				{
+					object obj = ReadValueWithTypeFromZPackage(package, type2);
+					dictionary.Add(field.GetValue(obj), field2.GetValue(obj));
+				}
+				return dictionary;
+			}
+			if (type != typeof(List<string>) && type.IsGenericType)
+			{
+				Type type3 = typeof(ICollection<>).MakeGenericType(type.GenericTypeArguments[0]);
+				if ((object)type3 != null && type3.IsAssignableFrom(type))
+				{
+					int num3 = package.ReadInt();
+					object obj2 = Activator.CreateInstance(type);
+					MethodInfo method = type3.GetMethod("Add");
+					for (int k = 0; k < num3; k++)
+					{
+						method.Invoke(obj2, new object[1] { ReadValueWithTypeFromZPackage(package, type.GenericTypeArguments[0]) });
+					}
+					return obj2;
+				}
+			}
+			ParameterInfo parameterInfo = (ParameterInfo)FormatterServices.GetUninitializedObject(typeof(ParameterInfo));
+			AccessTools.DeclaredField(typeof(ParameterInfo), "ClassImpl").SetValue(parameterInfo, type);
+			List<object> source = new List<object>();
+			ZRpc.Deserialize(new ParameterInfo[2] { null, parameterInfo }, package, ref source);
+			return source.First();
+		}
+	}
+	[PublicAPI]
+	[HarmonyPatch]
+	internal class VersionCheck
+	{
+		private static readonly HashSet<VersionCheck> versionChecks;
+
+		private static readonly Dictionary<string, string> notProcessedNames;
+
+		public string Name;
+
+		private string? displayName;
+
+		private string? currentVersion;
+
+		private string? minimumRequiredVersion;
+
+		public bool ModRequired = true;
+
+		private string? ReceivedCurrentVersion;
+
+		private string? ReceivedMinimumRequiredVersion;
+
+		private readonly List<ZRpc> ValidatedClients = new List<ZRpc>();
+
+		private ConfigSync? ConfigSync;
+
+		public string DisplayName
+		{
+			get
+			{
+				return displayName ?? Name;
+			}
+			set
+			{
+				displayName = value;
+			}
+		}
+
+		public string CurrentVersion
+		{
+			get
+			{
+				return currentVersion ?? "0.0.0";
+			}
+			set
+			{
+				currentVersion = value;
+			}
+		}
+
+		public string MinimumRequiredVersion
+		{
+			get
+			{
+				return minimumRequiredVersion ?? (ModRequired ? CurrentVersion : "0.0.0");
+			}
+			set
+			{
+				minimumRequiredVersion = value;
+			}
+		}
+
+		private static void PatchServerSync()
+		{
+			//IL_005e: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0064: Expected O, but got Unknown
+			Patches patchInfo = PatchProcessor.GetPatchInfo((MethodBase)AccessTools.DeclaredMethod(typeof(ZNet), "Awake", (Type[])null, (Type[])null));
+			if (patchInfo != null && patchInfo.Postfixes.Count((Patch p) => p.PatchMethod.DeclaringType == typeof(ConfigSync.RegisterRPCPatch)) > 0)
+			{
+				return;
+			}
+			Harmony val = new Harmony("org.bepinex.helpers.ServerSync");
+			foreach (Type item in from t in typeof(ConfigSync).GetNestedTypes(BindingFlags.NonPublic).Concat(new Type[1] { typeof(VersionCheck) })
+				where t.IsClass
+				select t)
+			{
+				val.PatchAll(item);
+			}
+		}
+
+		static VersionCheck()
+		{
+			versionChecks = new HashSet<VersionCheck>();
+			notProcessedNames = new Dictionary<string, string>();
+			typeof(ThreadingHelper).GetMethod("StartSyncInvoke").Invoke(ThreadingHelper.Instance, new object[1]
+			{
+				new Action(PatchServerSync)
+			});
+		}
+
+		public VersionCheck(string name)
+		{
+			Name = name;
+			ModRequired = true;
+			versionChecks.Add(this);
+		}
+
+		public VersionCheck(ConfigSync configSync)
+		{
+			ConfigSync = configSync;
+			Name = ConfigSync.Name;
+			versionChecks.Add(this);
+		}
+
+		public void Initialize()
+		{
+			ReceivedCurrentVersion = null;
+			ReceivedMinimumRequiredVersion = null;
+			if (ConfigSync != null)
+			{
+				Name = ConfigSync.Name;
+				DisplayName = ConfigSync.DisplayName;
+				CurrentVersion = ConfigSync.CurrentVersion;
+				MinimumRequiredVersion = ConfigSync.MinimumRequiredVersion;
+				ModRequired = ConfigSync.ModRequired;
+			}
+		}
+
+		private bool IsVersionOk()
+		{
+			if (ReceivedMinimumRequiredVersion == null || ReceivedCurrentVersion == null)
+			{
+				return !ModRequired;
+			}
+			bool flag = new Version(CurrentVersion) >= new Version(ReceivedMinimumRequiredVersion);
+			bool flag2 = new Version(ReceivedCurrentVersion) >= new Version(MinimumRequiredVersion);
+			return flag && flag2;
+		}
+
+		private string ErrorClient()
+		{
+			if (ReceivedMinimumRequiredVersion == null)
+			{
+				return DisplayName + " is not installed on the server.";
+			}
+			return (new Version(CurrentVersion) >= new Version(ReceivedMinimumRequiredVersion)) ? (DisplayName + " may not be higher than version " + ReceivedCurrentVersion + ". You have version " + CurrentVersion + ".") : (DisplayName + " needs to be at least version " + ReceivedMinimumRequiredVersion + ". You have version " + CurrentVersion + ".");
+		}
+
+		private string ErrorServer(ZRpc rpc)
+		{
+			return "Disconnect: The client (" + rpc.GetSocket().GetHostName() + ") doesn't have the correct " + DisplayName + " version " + MinimumRequiredVersion;
+		}
+
+		private string Error(ZRpc? rpc = null)
+		{
+			return (rpc == null) ? ErrorClient() : ErrorServer(rpc);
+		}
+
+		private static VersionCheck[] GetFailedClient()
+		{
+			return versionChecks.Where((VersionCheck check) => !check.IsVersionOk()).ToArray();
+		}
+
+		private static VersionCheck[] GetFailedServer(ZRpc rpc)
+		{
+			ZRpc rpc2 = rpc;
+			return versionChecks.Where((VersionCheck check) => check.ModRequired && !check.ValidatedClients.Contains(rpc2)).ToArray();
+		}
+
+		private static void Logout()
+		{
+			Game.instance.Logout(true, true);
+			AccessTools.DeclaredField(typeof(ZNet), "m_connectionStatus").SetValue(null, (object)(ConnectionStatus)3);
+		}
+
+		private static void DisconnectClient(ZRpc rpc)
+		{
+			rpc.Invoke("Error", new object[1] { 3 });
+		}
+
+		private static void CheckVersion(ZRpc rpc, ZPackage pkg)
+		{
+			CheckVersion(rpc, pkg, null);
+		}
+
+		private static void CheckVersion(ZRpc rpc, ZPackage pkg, Action<ZRpc, ZPackage>? original)
+		{
+			string text = pkg.ReadString();
+			string text2 = pkg.ReadString();
+			string text3 = pkg.ReadString();
+			bool flag = false;
+			foreach (VersionCheck versionCheck in versionChecks)
+			{
+				if (!(text != versionCheck.Name))
+				{
+					Debug.Log((object)("Received " + versionCheck.DisplayName + " version " + text3 + " and minimum version " + text2 + " from the " + (ZNet.instance.IsServer() ? "client" : "server") + "."));
+					versionCheck.ReceivedMinimumRequiredVersion = text2;
+					versionCheck.ReceivedCurrentVersion = text3;
+					if (ZNet.instance.IsServer() && versionCheck.IsVersionOk())
+					{
+						versionCheck.ValidatedClients.Add(rpc);
+					}
+					flag = true;
+				}
+			}
+			if (flag)
+			{
+				return;
+			}
+			pkg.SetPos(0);
+			if (original != null)
+			{
+				original(rpc, pkg);
+				if (pkg.GetPos() == 0)
+				{
+					notProcessedNames.Add(text, text3);
+				}
+			}
+		}
+
+		[HarmonyPatch(typeof(ZNet), "RPC_PeerInfo")]
+		[HarmonyPrefix]
+		private static bool RPC_PeerInfo(ZRpc rpc, ZNet __instance)
+		{
+			VersionCheck[] array = (__instance.IsServer() ? GetFailedServer(rpc) : GetFailedClient());
+			if (array.Length == 0)
+			{
+				return true;
+			}
+			VersionCheck[] array2 = array;
+			foreach (VersionCheck versionCheck in array2)
+			{
+				Debug.LogWarning((object)versionCheck.Error(rpc));
+			}
+			if (__instance.IsServer())
+			{
+				DisconnectClient(rpc);
+			}
+			else
+			{
+				Logout();
+			}
+			return false;
+		}
+
+		[HarmonyPatch(typeof(ZNet), "OnNewConnection")]
+		[HarmonyPrefix]
+		private static void RegisterAndCheckVersion(ZNetPeer peer, ZNet __instance)
+		{
+			//IL_018e: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0195: Expected O, but got Unknown
+			notProcessedNames.Clear();
+			IDictionary dictionary = (IDictionary)typeof(ZRpc).GetField("m_functions", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(peer.m_rpc);
+			if (dictionary.Contains(StringExtensionMethods.GetStableHashCode("ServerSync VersionCheck")))
+			{
+				object obj = dictionary[StringExtensionMethods.GetStableHashCode("ServerSync VersionCheck")];
+				Action<ZRpc, ZPackage> action = (Action<ZRpc, ZPackage>)obj.GetType().GetField("m_action", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(obj);
+				peer.m_rpc.Register<ZPackage>("ServerSync VersionCheck", (Action<ZRpc, ZPackage>)delegate(ZRpc rpc, ZPackage pkg)
+				{
+					CheckVersion(rpc, pkg, action);
+				});
+			}
+			else
+			{
+				peer.m_rpc.Register<ZPackage>("ServerSync VersionCheck", (Action<ZRpc, ZPackage>)CheckVersion);
+			}
+			foreach (VersionCheck versionCheck in versionChecks)
+			{
+				versionCheck.Initialize();
+				if (versionCheck.ModRequired || __instance.IsServer())
+				{
+					Debug.Log((object)("Sending " + versionCheck.DisplayName + " version " + versionCheck.CurrentVersion + " and minimum version " + versionCheck.MinimumRequiredVersion + " to the " + (__instance.IsServer() ? "client" : "server") + "."));
+					ZPackage val = new ZPackage();
+					val.Write(versionCheck.Name);
+					val.Write(versionCheck.MinimumRequiredVersion);
+					val.Write(versionCheck.CurrentVersion);
+					peer.m_rpc.Invoke("ServerSync VersionCheck", new object[1] { val });
+				}
+			}
+		}
+
+		[HarmonyPatch(typeof(ZNet), "Disconnect")]
+		[HarmonyPrefix]
+		private static void RemoveDisconnected(ZNetPeer peer, ZNet __instance)
+		{
+			if (!__instance.IsServer())
+			{
+				return;
+			}
+			foreach (VersionCheck versionCheck in versionChecks)
+			{
+				versionCheck.ValidatedClients.Remove(peer.m_rpc);
+			}
+		}
+
+		[HarmonyPatch(typeof(FejdStartup), "ShowConnectError")]
+		[HarmonyPostfix]
+		private static void ShowConnectionError(FejdStartup __instance)
+		{
+			//IL_000e: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0014: Invalid comparison between Unknown and I4
+			//IL_0186: Unknown result type (might be due to invalid IL or missing references)
+			//IL_018b: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0199: Unknown result type (might be due to invalid IL or missing references)
+			//IL_01de: Unknown result type (might be due to invalid IL or missing references)
+			//IL_01ea: Unknown result type (might be due to invalid IL or missing references)
+			//IL_01f8: Unknown result type (might be due to invalid IL or missing references)
+			//IL_020a: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0219: Unknown result type (might be due to invalid IL or missing references)
+			//IL_021e: Unknown result type (might be due to invalid IL or missing references)
+			//IL_0229: Unknown result type (might be due to invalid IL or missing references)
+			if (!__instance.m_connectionFailedPanel.activeSelf || (int)ZNet.GetConnectionStatus() != 3)
+			{
+				return;
+			}
+			bool flag = false;
+			VersionCheck[] failedClient = GetFailedClient();
+			if (failedClient.Length != 0)
+			{
+				string text = string.Join("\n", failedClient.Select((VersionCheck check) => check.Error()));
+				TMP_Text connectionFailedError = __instance.m_connectionFailedError;
+				connectionFailedError.text = connectionFailedError.text + "\n" + text;
+				flag = true;
+			}
+			foreach (KeyValuePair<string, string> item in notProcessedNames.OrderBy<KeyValuePair<string, string>, string>((KeyValuePair<string, string> kv) => kv.Key))
+			{
+				if (!__instance.m_connectionFailedError.text.Contains(item.Key))
+				{
+					TMP_Text connectionFailedError2 = __instance.m_connectionFailedError;
+					connectionFailedError2.text = connectionFailedError2.text + "\nServer expects you to have " + item.Key + " (Version: " + item.Value + ") installed.";
+					flag = true;
+				}
+			}
+			if (flag)
+			{
+				RectTransform component = ((Component)__instance.m_connectionFailedPanel.transform.Find("Image")).GetComponent<RectTransform>();
+				Vector2 sizeDelta = component.sizeDelta;
+				sizeDelta.x = 675f;
+				component.sizeDelta = sizeDelta;
+				__instance.m_connectionFailedError.ForceMeshUpdate(false, false);
+				float num = __instance.m_connectionFailedError.renderedHeight + 105f;
+				RectTransform component2 = ((Component)((Component)component).transform.Find("ButtonOk")).GetComponent<RectTransform>();
+				component2.anchoredPosition = new Vector2(component2.anchoredPosition.x, component2.anchoredPosition.y - (num - component.sizeDelta.y) / 2f);
+				sizeDelta = component.sizeDelta;
+				sizeDelta.y = num;
+				component.sizeDelta = sizeDelta;
+			}
+		}
+	}
+}
+

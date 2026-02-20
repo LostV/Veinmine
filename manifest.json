@@ -1,0 +1,9 @@
+{
+    "name": "Veinmine",
+    "version_number": "1.0.0",
+    "website_url": "https://github.com/LostV/veinmine",
+    "description": "A vein mining mod for Valheim that allows recursive mining of connected ores.",
+    "dependencies": [
+        "denikson-BepInExPack_Valheim-5.4.2202"
+    ]
+}
